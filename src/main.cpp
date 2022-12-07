@@ -23,22 +23,62 @@
 using Vector2d = sf::Vector2<double>;
 using Point = sf::Vector2<double>;
 
-constexpr float eps = 0.001;
+constexpr float eps = 0.01;
 namespace std {
 bool operator<(const Point& lhs, const Point& rhs) {
   return lhs.x < rhs.x || lhs.x == rhs.x && lhs.y < rhs.y;
 }
 }  // namespace std
 
-// bool operator==(const Point& lhs, const Point& rhs) {
-//   return std::abs(lhs.x - rhs.x) <= eps && std::abs(lhs.y - rhs.y) <= eps;
-// }
+bool operator==(const Point& lhs, const Point& rhs) {
+  return std::abs(lhs.x - rhs.x) <= eps && std::abs(lhs.y - rhs.y) <= eps;
+}
 
-// bool operator!=(const Point& lhs, const Point& rhs) { return !(lhs == rhs); }
+bool operator!=(const Point& lhs, const Point& rhs) { return !(lhs == rhs); }
+
+enum class IntersectType { In, Out, Parallel };
+
+using IntersectPoint = std::pair<Point, IntersectType>;
 
 struct Line {
   Point start;
   Point end;
+
+  std::optional<IntersectPoint> get_intersection(const Line& rhs) const {
+    double a2 = rhs.end.y - rhs.start.y;
+    double b2 = rhs.start.x - rhs.end.x;
+    double c2 = a2 * rhs.start.x + b2 * rhs.start.y;
+
+    double _a1 = end.y - start.y;
+    double _b1 = start.x - end.x;
+    double _c1 = _a1 * start.x + _b1 * start.y;
+
+    double determinant = _a1 * b2 - a2 * _b1;
+
+    if (determinant == 0) {
+      return {};
+    } else {
+      double x = (b2 * _c1 - _b1 * c2) / determinant;
+      double y = (_a1 * c2 - a2 * _c1) / determinant;
+
+      // check if point belongs to segment
+      if (x < std::min(start.x, end.x) || x > std::max(start.x, end.x))
+        return {};
+      if (y < std::min(start.y, end.y) || y > std::max(start.y, end.y))
+        return {};
+
+      if (x < std::min(rhs.start.x, rhs.end.x) ||
+          x > std::max(rhs.start.x, rhs.end.x))
+        return {};
+      if (y < std::min(rhs.start.y, rhs.end.y) ||
+          y > std::max(rhs.start.y, rhs.end.y))
+        return {};
+
+      IntersectPoint point = {
+          {x, y}, determinant < 0 ? IntersectType::In : IntersectType::Out};
+      return point;
+    }
+  }
 };
 
 class Shape {
@@ -70,10 +110,6 @@ class Shape {
   std::list<Line> _edges;
 };
 
-enum class IntersectType { In, Out, Parallel };
-
-using IntersectPoint = std::pair<Point, IntersectType>;
-
 double len(const Vector2d& vec) {
   return std::sqrt(vec.x * vec.x + vec.y * vec.y);
 }
@@ -86,50 +122,7 @@ double dot_product(const Vector2d& lhs, const Vector2d& rhs) {
   return lhs.x * rhs.x + lhs.y * rhs.y;
 }
 
-std::optional<Point> intersect(const Line& lhs, const Line& rhs) {
-  auto normal = get_in_normal(rhs);
-
-  auto upper = dot_product(normal, lhs.start - rhs.start);
-  auto bottom = dot_product(normal, lhs.end - lhs.start);
-
-  if (bottom == 0) {
-    return {};
-  }
-
-  auto t = -upper / bottom;
-
-  if (t < 0 || t > 1) {
-    return {};
-  }
-
-  auto p_t = [&lhs](auto t) { return lhs.start + (lhs.end - lhs.start) * t; };
-
-  return p_t(t);
-}
-
 // Cyrus–Beck
-std::optional<IntersectPoint> get_intersection(const Line& line,
-                                               const Line& edge) {
-  auto normal = get_in_normal(edge);
-
-  auto intersection = intersect(line, edge);
-
-  if (!intersection || !intersect(edge, line)) {
-    return {};
-  }
-
-  auto product = dot_product(normal, line.end - edge.start);
-
-  if (product > 0) {
-    return IntersectPoint{*intersection, IntersectType::Out};
-  } else if (product < 0) {
-    return IntersectPoint{*intersection, IntersectType::In};
-  } else {
-    return IntersectPoint{*intersection, IntersectType::Parallel};
-  }
-
-  return {};
-}
 
 void insert_by_line(const Point& point, const Line& line,
                     std::list<Point>& list) {
@@ -158,7 +151,6 @@ std::list<Shape> get_masked_shapes(std::list<Point> clipped,
                                    std::set<Point> out_points) {
   std::set<Point> used;
   std::list<Shape> masked_shapes;
-  // return  masked_shapes;
 
   for (const auto& point : in_points) {
     if (used.count(point)) {
@@ -173,7 +165,7 @@ std::list<Shape> get_masked_shapes(std::list<Point> clipped,
     do {
       used.insert(*total);
 
-      while (out_points.count(*total) == 0) {
+      do {
         used.insert(*total);
         masked.push_back(*total);
 
@@ -181,19 +173,18 @@ std::list<Shape> get_masked_shapes(std::list<Point> clipped,
         if (total == clipped.end()) {
           total = clipped.begin();
         }
-      }
+      } while (out_points.count(*total) == 0 && in_points.count(*total) == 0);
 
       total = std::find(clipping.begin(), clipping.end(), *total);
 
-      while (in_points.count(*total) == 0) {
-        used.insert(*total);
+      do {
         masked.push_back(*total);
 
         total++;
         if (total == clipping.end()) {
           total = clipping.begin();
         }
-      }
+      } while (out_points.count(*total) == 0 && in_points.count(*total) == 0);
 
       total = std::find(clipped.begin(), clipped.end(), *total);
 
@@ -211,7 +202,6 @@ std::list<Shape> get_merged_shapes(std::list<Point> clipped,
                                    std::set<Point> out_points) {
   std::set<Point> used;
   std::list<Shape> merged_shapes;
-  // return  merged_shapes
 
   for (const auto& point : out_points) {
     if (used.count(point)) {
@@ -219,12 +209,13 @@ std::list<Shape> get_merged_shapes(std::list<Point> clipped,
     }
 
     const auto start_point = point;
+
     std::list<Point> merged{};
 
     auto total = std::find(clipped.begin(), clipped.end(), start_point);
 
     do {
-      while (in_points.count(*total) == 0) {
+      do {
         used.insert(*total);
         merged.push_back(*total);
 
@@ -232,20 +223,20 @@ std::list<Shape> get_merged_shapes(std::list<Point> clipped,
         if (total == clipped.end()) {
           total = clipped.begin();
         }
-      }
+      } while (in_points.count(*total) == 0 && out_points.count(*total) == 0);
 
       auto reversed_total =
           std::find(clipping.rbegin(), clipping.rend(), *total);
 
-      while (out_points.count(*reversed_total) == 0) {
-        used.insert(*reversed_total);
+      do {
         merged.push_back(*reversed_total);
 
         reversed_total++;
         if (reversed_total == clipping.rend()) {
           reversed_total = clipping.rbegin();
         }
-      }
+      } while (in_points.count(*reversed_total) == 0 &&
+               out_points.count(*reversed_total) == 0);
 
       total = std::find(clipped.begin(), clipped.end(), *reversed_total);
 
@@ -257,15 +248,22 @@ std::list<Shape> get_merged_shapes(std::list<Point> clipped,
   return merged_shapes;
 }
 
-auto wailer_atherton_clipping(const Shape& clipped, const Shape& clipping) {
+bool shape_in(const Shape &shape, const Shape &other) {
+  
+}
+
+using OutShapes = std::list<Shape>;
+using InnerShapes = std::list<Shape>;
+std::pair<OutShapes, InnerShapes> clipping(const Shape& subj,
+                                           const Shape& mask) {
   std::set<Point> in_points, out_points;
 
-  auto clipped_points = clipped.get_points();
-  auto clipping_points = clipping.get_points();
+  auto clipped_points = subj.get_points();
+  auto clipping_points = mask.get_points();
 
-  for (const auto& line : clipped.get_edges()) {
-    for (const auto& edge : clipping.get_edges()) {
-      auto intersection = get_intersection(line, edge);
+  for (const auto& line : subj.get_edges()) {
+    for (const auto& edge : mask.get_edges()) {
+      auto intersection = line.get_intersection(edge);
 
       if (intersection.has_value()) {
         if (intersection->second == IntersectType::In) {
@@ -280,6 +278,15 @@ auto wailer_atherton_clipping(const Shape& clipped, const Shape& clipping) {
     }
   }
 
+  if (in_points.empty() && out_points.empty()) {
+    return shape_in(subj, mask)
+               ? std::make_pair<OutShapes, InnerShapes>({}, {subj})
+               : std::make_pair<OutShapes, InnerShapes>({subj}, {});
+  }
+  // if true - return subj as internal
+  // esle - subj is out of mask, return subj as out
+
+  // TODO: if there some in/out points
   auto merged_shapes =
       get_merged_shapes(clipped_points, clipping_points, in_points, out_points);
   auto masked_shapes =
@@ -291,9 +298,9 @@ auto wailer_atherton_clipping(const Shape& clipped, const Shape& clipping) {
 int main(int argc, char* argv[]) {
   Shape triangle = {{200, 550}, {400, 200}, {600, 550}};
 
-  const auto square_side = 350;
-  float start_x = 50;
-  float step = 0;
+  const auto square_side = 100;
+  float start_x = 250;
+  float step = 0.01;
 
   sf::RenderWindow window(sf::VideoMode(800, 800), "lab-4");
 
@@ -312,13 +319,21 @@ int main(int argc, char* argv[]) {
                     {start_x + square_side, 200 + square_side},
                     {start_x, 200 + square_side}};
 
-    for (const auto& [start, end] : square.get_edges()) {
-      sf::Vertex vertex[] = {sf::Vector2f(start.x, start.y),
-                             sf::Vector2f(end.x, end.y)};
-      window.draw(vertex, 2, sf::PrimitiveType::Lines);
+    // for (const auto& [start, end] : square.get_edges()) {
+    //   sf::Vertex vertex[] = {sf::Vector2f(start.x, start.y),
+    //                          sf::Vector2f(end.x, end.y)};
+    //   window.draw(vertex, 2, sf::PrimitiveType::Lines);
+    // }
+
+    auto [merged, masked] = clipping(square, triangle);
+    for (const auto& shape : merged) {
+      for (const auto& [start, end] : shape.get_edges()) {
+        sf::Vertex vertex[] = {{sf::Vector2f(start.x, start.y), sf::Color::Red},
+                               {sf::Vector2f(end.x, end.y), sf::Color::Red}};
+        window.draw(vertex, 2, sf::PrimitiveType::Lines);
+      }
     }
 
-    auto [merged, masked] = wailer_atherton_clipping(square, triangle);
     for (const auto& shape : masked) {
       for (const auto& [start, end] : shape.get_edges()) {
         sf::Vertex vertex[] = {{sf::Vector2f(start.x, start.y), sf::Color::Red},
