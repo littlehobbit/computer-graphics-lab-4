@@ -1,6 +1,12 @@
-#include <X11/Xprotostr.h>
-
 #include <SFML/Graphics.hpp>
+#include <SFML/Graphics/Color.hpp>
+#include <SFML/Graphics/PrimitiveType.hpp>
+#include <SFML/Graphics/RenderWindow.hpp>
+#include <SFML/Graphics/Vertex.hpp>
+#include <SFML/Graphics/VertexArray.hpp>
+#include <SFML/System/Vector2.hpp>
+#include <SFML/Window.hpp>
+#include <SFML/Window/VideoMode.hpp>
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
@@ -12,13 +18,7 @@
 #include <utility>
 #include <vector>
 
-#include "SFML/Graphics/Color.hpp"
-#include "SFML/Graphics/PrimitiveType.hpp"
-#include "SFML/Graphics/RenderWindow.hpp"
-#include "SFML/Graphics/Vertex.hpp"
-#include "SFML/Graphics/VertexArray.hpp"
-#include "SFML/System/Vector2.hpp"
-#include "SFML/Window/VideoMode.hpp"
+#include "point.h"
 
 using Vector2d = sf::Vector2<double>;
 using Point = sf::Vector2<double>;
@@ -45,6 +45,7 @@ struct Line {
   Point end;
 
   std::optional<IntersectPoint> get_intersection(const Line& rhs) const {
+    // TODO: stopre a, b ,c in line
     double a2 = rhs.end.y - rhs.start.y;
     double b2 = rhs.start.x - rhs.end.x;
     double c2 = a2 * rhs.start.x + b2 * rhs.start.y;
@@ -248,14 +249,41 @@ std::list<Shape> get_merged_shapes(std::list<Point> clipped,
   return merged_shapes;
 }
 
-bool shape_in(const Shape &shape, const Shape &other) {
-  
+bool point_in_shape(const Point& point, const Shape& shape) {
+  for (const auto& edge : shape.get_edges()) {
+    auto det = ((edge.end.x - edge.start.x) * (-point.y + edge.start.y) -
+                (-edge.end.y + edge.start.y) * (point.x - edge.start.x));
+    if (det > 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool shape_in(const Shape& shape, const Shape& other) {
+  for (const auto& point : shape.get_points()) {
+    if (!point_in_shape(point, other)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool shape_out(const Shape& shape, const Shape& other) {
+  for (const auto& point : shape.get_points()) {
+    if (point_in_shape(point, other)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 using OutShapes = std::list<Shape>;
 using InnerShapes = std::list<Shape>;
 std::pair<OutShapes, InnerShapes> clipping(const Shape& subj,
                                            const Shape& mask) {
+  // TODO: check subj in mask
+
   std::set<Point> in_points, out_points;
 
   auto clipped_points = subj.get_points();
@@ -278,11 +306,19 @@ std::pair<OutShapes, InnerShapes> clipping(const Shape& subj,
     }
   }
 
-  if (in_points.empty() && out_points.empty()) {
-    return shape_in(subj, mask)
-               ? std::make_pair<OutShapes, InnerShapes>({}, {subj})
-               : std::make_pair<OutShapes, InnerShapes>({subj}, {});
+  if (out_points.empty() && in_points.empty()) {
+    if (shape_in(subj, mask)) {
+      return {{}, {subj}};
+    } else if (shape_out(subj, mask)) {
+      return {{subj}, {}};
+    }
   }
+
+  // if (in_points.empty() && out_points.empty()) {
+  //   return shape_in(subj, mask)
+  //              ? std::make_pair<OutShapes, InnerShapes>({}, {subj})
+  //              : std::make_pair<OutShapes, InnerShapes>({subj}, {});
+  // }
   // if true - return subj as internal
   // esle - subj is out of mask, return subj as out
 
@@ -298,8 +334,8 @@ std::pair<OutShapes, InnerShapes> clipping(const Shape& subj,
 int main(int argc, char* argv[]) {
   Shape triangle = {{200, 550}, {400, 200}, {600, 550}};
 
-  const auto square_side = 100;
-  float start_x = 250;
+  const auto square_side = 50;
+  float start_x = 300;
   float step = 0.01;
 
   sf::RenderWindow window(sf::VideoMode(800, 800), "lab-4");
@@ -314,10 +350,10 @@ int main(int argc, char* argv[]) {
 
     window.clear();
 
-    Shape square = {{start_x, 200},
-                    {start_x + square_side, 200},
-                    {start_x + square_side, 200 + square_side},
-                    {start_x, 200 + square_side}};
+    Shape square = {{start_x, 300},
+                    {start_x + square_side, 300},
+                    {start_x + square_side, 400},
+                    {start_x, 400}};
 
     // for (const auto& [start, end] : square.get_edges()) {
     //   sf::Vertex vertex[] = {sf::Vector2f(start.x, start.y),
@@ -336,7 +372,8 @@ int main(int argc, char* argv[]) {
 
     for (const auto& shape : masked) {
       for (const auto& [start, end] : shape.get_edges()) {
-        sf::Vertex vertex[] = {{sf::Vector2f(start.x, start.y), sf::Color::Red},
+        sf::Vertex vertex[] = {{sf::Vector2f(start.x, start.y),
+        sf::Color::Red},
                                {sf::Vector2f(end.x, end.y), sf::Color::Red}};
         window.draw(vertex, 2, sf::PrimitiveType::Lines);
       }
