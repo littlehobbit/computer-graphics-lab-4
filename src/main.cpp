@@ -18,112 +18,12 @@
 #include <utility>
 #include <vector>
 
-#include "point.h"
-
-using Vector2d = sf::Vector2<double>;
-using Point = sf::Vector2<double>;
-
-constexpr float eps = 0.01;
-namespace std {
-bool operator<(const Point& lhs, const Point& rhs) {
-  return lhs.x < rhs.x || lhs.x == rhs.x && lhs.y < rhs.y;
-}
-}  // namespace std
-
-bool operator==(const Point& lhs, const Point& rhs) {
-  return std::abs(lhs.x - rhs.x) <= eps && std::abs(lhs.y - rhs.y) <= eps;
-}
-
-bool operator!=(const Point& lhs, const Point& rhs) { return !(lhs == rhs); }
-
-enum class IntersectType { In, Out, Parallel };
-
-using IntersectPoint = std::pair<Point, IntersectType>;
-
-struct Line {
-  Point start;
-  Point end;
-
-  std::optional<IntersectPoint> get_intersection(const Line& rhs) const {
-    // TODO: stopre a, b ,c in line
-    double a2 = rhs.end.y - rhs.start.y;
-    double b2 = rhs.start.x - rhs.end.x;
-    double c2 = a2 * rhs.start.x + b2 * rhs.start.y;
-
-    double _a1 = end.y - start.y;
-    double _b1 = start.x - end.x;
-    double _c1 = _a1 * start.x + _b1 * start.y;
-
-    double determinant = _a1 * b2 - a2 * _b1;
-
-    if (determinant == 0) {
-      return {};
-    } else {
-      double x = (b2 * _c1 - _b1 * c2) / determinant;
-      double y = (_a1 * c2 - a2 * _c1) / determinant;
-
-      // check if point belongs to segment
-      if (x < std::min(start.x, end.x) || x > std::max(start.x, end.x))
-        return {};
-      if (y < std::min(start.y, end.y) || y > std::max(start.y, end.y))
-        return {};
-
-      if (x < std::min(rhs.start.x, rhs.end.x) ||
-          x > std::max(rhs.start.x, rhs.end.x))
-        return {};
-      if (y < std::min(rhs.start.y, rhs.end.y) ||
-          y > std::max(rhs.start.y, rhs.end.y))
-        return {};
-
-      IntersectPoint point = {
-          {x, y}, determinant < 0 ? IntersectType::In : IntersectType::Out};
-      return point;
-    }
-  }
-};
-
-class Shape {
- public:
-  Shape(std::list<Point> points) : _points(std::move(points)) {
-    auto edge_start = _points.end(), edge_end = _points.begin();
-    edge_start--;
-    while (edge_end != _points.end()) {
-      _edges.push_back({*edge_start, *edge_end});
-      edge_start = edge_end++;
-    }
-  }
-
-  Shape(const std::initializer_list<Point>& points) : _points(points) {
-    auto edge_start = _points.end(), edge_end = _points.begin();
-    edge_start--;
-    while (edge_end != _points.end()) {
-      _edges.push_back({*edge_start, *edge_end});
-      edge_start = edge_end++;
-    }
-  }
-
-  const auto& get_edges() const { return _edges; }
-
-  const auto& get_points() const { return _points; }
-
- private:
-  std::list<Point> _points;
-  std::list<Line> _edges;
-};
+#include "line.h"
+#include "shape.h"
 
 double len(const Vector2d& vec) {
   return std::sqrt(vec.x * vec.x + vec.y * vec.y);
 }
-
-Vector2d get_in_normal(const Line& line) {
-  return Vector2d{line.end.y - line.start.y, -(line.end.x - line.start.x)};
-}
-
-double dot_product(const Vector2d& lhs, const Vector2d& rhs) {
-  return lhs.x * rhs.x + lhs.y * rhs.y;
-}
-
-// Cyrus–Beck
 
 void insert_by_line(const Point& point, const Line& line,
                     std::list<Point>& list) {
@@ -249,45 +149,16 @@ std::list<Shape> get_merged_shapes(std::list<Point> clipped,
   return merged_shapes;
 }
 
-bool point_in_shape(const Point& point, const Shape& shape) {
-  for (const auto& edge : shape.get_edges()) {
-    auto det = ((edge.end.x - edge.start.x) * (-point.y + edge.start.y) -
-                (-edge.end.y + edge.start.y) * (point.x - edge.start.x));
-    if (det > 0) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool shape_in(const Shape& shape, const Shape& other) {
-  for (const auto& point : shape.get_points()) {
-    if (!point_in_shape(point, other)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool shape_out(const Shape& shape, const Shape& other) {
-  for (const auto& point : shape.get_points()) {
-    if (point_in_shape(point, other)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 using OutShapes = std::list<Shape>;
 using InnerShapes = std::list<Shape>;
 std::pair<OutShapes, InnerShapes> clipping(const Shape& subj,
                                            const Shape& mask) {
-  // TODO: check subj in mask
-
   std::set<Point> in_points, out_points;
 
-  auto clipped_points = subj.get_points();
-  auto clipping_points = mask.get_points();
+  std::list<Point> clipped_points(subj.get_points().begin(),
+                                  subj.get_points().end());
+  std::list<Point> clipping_points(mask.get_points().begin(),
+                                   mask.get_points().end());
 
   for (const auto& line : subj.get_edges()) {
     for (const auto& edge : mask.get_edges()) {
@@ -306,23 +177,14 @@ std::pair<OutShapes, InnerShapes> clipping(const Shape& subj,
     }
   }
 
-  if (out_points.empty() && in_points.empty()) {
-    if (shape_in(subj, mask)) {
+  if (out_points.empty() || in_points.empty()) {
+    if (mask.contains(subj)) {
       return {{}, {subj}};
-    } else if (shape_out(subj, mask)) {
+    } else {
       return {{subj}, {}};
     }
   }
 
-  // if (in_points.empty() && out_points.empty()) {
-  //   return shape_in(subj, mask)
-  //              ? std::make_pair<OutShapes, InnerShapes>({}, {subj})
-  //              : std::make_pair<OutShapes, InnerShapes>({subj}, {});
-  // }
-  // if true - return subj as internal
-  // esle - subj is out of mask, return subj as out
-
-  // TODO: if there some in/out points
   auto merged_shapes =
       get_merged_shapes(clipped_points, clipping_points, in_points, out_points);
   auto masked_shapes =
@@ -332,7 +194,7 @@ std::pair<OutShapes, InnerShapes> clipping(const Shape& subj,
 }
 
 int main(int argc, char* argv[]) {
-  Shape triangle = {{200, 550}, {400, 200}, {600, 550}};
+  Shape big_mask = {{200, 200}, {600, 200}, {600, 600}, {200, 600}};
 
   const auto square_side = 50;
   float start_x = 300;
@@ -361,27 +223,28 @@ int main(int argc, char* argv[]) {
     //   window.draw(vertex, 2, sf::PrimitiveType::Lines);
     // }
 
-    auto [merged, masked] = clipping(square, triangle);
+    auto [merged, masked] = clipping(square, big_mask);
     for (const auto& shape : merged) {
-      for (const auto& [start, end] : shape.get_edges()) {
-        sf::Vertex vertex[] = {{sf::Vector2f(start.x, start.y), sf::Color::Red},
-                               {sf::Vector2f(end.x, end.y), sf::Color::Red}};
+      for (const auto& edge : shape.get_edges()) {
+        sf::Vertex vertex[] = {
+            {sf::Vector2f(edge.start.x, edge.start.y), sf::Color::Red},
+            {sf::Vector2f(edge.end.x, edge.end.y), sf::Color::Red}};
         window.draw(vertex, 2, sf::PrimitiveType::Lines);
       }
     }
 
     for (const auto& shape : masked) {
-      for (const auto& [start, end] : shape.get_edges()) {
-        sf::Vertex vertex[] = {{sf::Vector2f(start.x, start.y),
-        sf::Color::Red},
-                               {sf::Vector2f(end.x, end.y), sf::Color::Red}};
+      for (const auto& edge : shape.get_edges()) {
+        sf::Vertex vertex[] = {
+            {sf::Vector2f(edge.start.x, edge.start.y), sf::Color::Red},
+            {sf::Vector2f(edge.end.x, edge.end.y), sf::Color::Red}};
         window.draw(vertex, 2, sf::PrimitiveType::Lines);
       }
     }
 
-    for (const auto& [start, end] : triangle.get_edges()) {
-      sf::Vertex vertex[] = {sf::Vector2f(start.x, start.y),
-                             sf::Vector2f(end.x, end.y)};
+    for (const auto& edge : big_mask.get_edges()) {
+      sf::Vertex vertex[] = {sf::Vector2f(edge.start.x, edge.start.y),
+                             sf::Vector2f(edge.end.x, edge.end.y)};
       window.draw(vertex, 2, sf::PrimitiveType::Lines);
     }
 
