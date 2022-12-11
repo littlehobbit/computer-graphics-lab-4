@@ -21,5 +21,10 @@ target_link_libraries(
   ${PROJECT_NAME}
   sfml-graphics    
   sfml-window
+  CLI11::CLI11
+  jsoncpp_static
+  config_loader
 )
+
+target_compile_definitions(${PROJECT_NAME} PUBLIC HAS_JSONCPP)
 

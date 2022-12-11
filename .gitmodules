@@ -1,3 +1,9 @@
 [submodule "libs/SFML"]
 	path = libs/SFML
 	url = git@github.com:SFML/SFML.git
+[submodule "libs/cli11"]
+	path = libs/cli11
+	url = git@github.com:CLIUtils/CLI11.git
+[submodule "libs/config"]
+	path = libs/config
+	url = git@github.com:netcan/config-loader.git
