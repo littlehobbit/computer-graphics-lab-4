@@ -3,6 +3,7 @@
 
 #include <SFML/Graphics.hpp>
 #include <algorithm>
+#include <iostream>
 #include <list>
 #include <set>
 
@@ -145,50 +146,53 @@ using OutShapes = std::list<Shape>;
 using InnerShapes = std::list<Shape>;
 std::pair<OutShapes, InnerShapes> clipping(const Shape& subj, const Shape& mask,
                                            bool ret_masked) {
-  std::set<Point> in_points, out_points;
+  if (mask.contains(subj)) {
+    if (ret_masked)
+      return {{}, {subj}};
+    else
+      return {};
+  } else {
+    std::set<Point> in_points, out_points;
 
-  std::list<Point> clipped_points(subj.get_points().begin(),
-                                  subj.get_points().end());
-  std::list<Point> clipping_points(mask.get_points().begin(),
-                                   mask.get_points().end());
+    std::list<Point> clipped_points(subj.get_points().begin(),
+                                    subj.get_points().end());
+    std::list<Point> clipping_points(mask.get_points().begin(),
+                                     mask.get_points().end());
 
-  for (const auto& line : subj.get_edges()) {
-    for (const auto& edge : mask.get_edges()) {
-      auto intersection = line.get_intersection(edge);
+    for (const auto& line : subj.get_edges()) {
+      for (const auto& edge : mask.get_edges()) {
+        auto intersection = line.get_intersection(edge);
 
-      if (intersection.has_value()) {
-        if (intersection->second == IntersectType::In) {
-          in_points.insert(intersection->first);
-        } else {
-          out_points.insert(intersection->first);
+        if (intersection.has_value()) {
+          if (intersection->second == IntersectType::In) {
+            in_points.insert(intersection->first);
+          } else {
+            out_points.insert(intersection->first);
+          }
+
+          insert_by_line(intersection->first, line, clipped_points);
+          insert_by_line(intersection->first, edge, clipping_points);
         }
-
-        insert_by_line(intersection->first, line, clipped_points);
-        insert_by_line(intersection->first, edge, clipping_points);
       }
     }
-  }
 
-  if (out_points.empty() || in_points.empty()) {
-    if (mask.contains(subj)) {
-      if (ret_masked)
-        return {{}, {subj}};
-      else
-        return {};
-    } else {
+    if (out_points.empty() || in_points.empty() ||
+        out_points.size() == 1 && in_points.size() == 1 &&
+            *out_points.begin() == *in_points.begin()) {
       return {{subj}, {}};
+    } else {
+      auto merged_shapes = get_merged_shapes(clipped_points, clipping_points,
+                                             in_points, out_points);
+      auto masked_shapes = get_masked_shapes(clipped_points, clipping_points,
+                                             in_points, out_points);
+
+      if (ret_masked)
+        return std::make_pair(std::move(merged_shapes),
+                              std::move(masked_shapes));
+      else
+        return std::make_pair(std::move(merged_shapes), InnerShapes{});
     }
   }
-
-  auto merged_shapes =
-      get_merged_shapes(clipped_points, clipping_points, in_points, out_points);
-  auto masked_shapes =
-      get_masked_shapes(clipped_points, clipping_points, in_points, out_points);
-
-  if (ret_masked)
-    return std::make_pair(std::move(merged_shapes), std::move(masked_shapes));
-  else
-    return std::make_pair(std::move(merged_shapes), InnerShapes{});
 }
 
 #endif
