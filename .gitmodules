@@ -4,3 +4,6 @@
 [submodule "libs/cli11"]
 	path = libs/cli11
 	url = git@github.com:CLIUtils/CLI11.git
+[submodule "libs/config"]
+	path = libs/config
+	url = git@github.com:littlehobbit/config-loader.git
