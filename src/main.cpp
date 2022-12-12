@@ -55,8 +55,8 @@ std::optional<config::Config> read_config(const std::string& file_path) {
 
 int main(int argc, char* argv[]) {
   bool show_masked = false;
-  int mask_width = 200;
-  int mask_height = 200;
+  int mask_width = 500;
+  int mask_height = 500;
 
   CLI::App app("lab-4 app", "lab-4");
   app.add_flag("--mode-b", show_masked, "Mode B");
@@ -101,7 +101,7 @@ int main(int argc, char* argv[]) {
   auto mask = std::make_shared<WindowMaskLayer>(mask_width, mask_height);
   container.add_layer(mask);
 
-  sf::RenderWindow window(sf::VideoMode(800, 800), "lab-4");
+  sf::RenderWindow window(sf::VideoMode(1000, 800), "lab-4");
   while (window.isOpen()) {
     sf::Event event;
     while (window.pollEvent(event)) {
@@ -114,8 +114,6 @@ int main(int argc, char* argv[]) {
 
     auto pos = sf::Mouse::getPosition(window);
     mask->set_pos(pos);
-
-    // std::cout << pos.x << ' ' << pos.y << std::endl;
 
     container.draw(window, show_masked);
 

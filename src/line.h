@@ -13,19 +13,6 @@ using Vector2d = sf::Vector2<double>;
 using Point = Vector2d;
 
 constexpr float eps = 0.01;
-namespace std {
-inline bool operator<(const Point& lhs, const Point& rhs) {
-  return lhs.x < rhs.x || lhs.x == rhs.x && lhs.y < rhs.y;
-}
-}  // namespace std
-
-inline bool operator==(const Point& lhs, const Point& rhs) {
-  return std::abs(lhs.x - rhs.x) <= eps && std::abs(lhs.y - rhs.y) <= eps;
-}
-
-inline bool operator!=(const Point& lhs, const Point& rhs) {
-  return !(lhs == rhs);
-}
 
 enum class IntersectType { In, Out, Parallel };
 
@@ -33,9 +20,25 @@ using IntersectPoint = std::pair<Point, IntersectType>;
 
 enum class LineStyle { Line, Dashed };
 
+inline bool equals(double a, double b) { return std::abs(a - b) <= eps; }
+
 inline bool less(double a, double b) { return b - a > eps; }
 
 inline bool bigger(double a, double b) { return a - b > eps; }
+
+inline bool operator==(const Point& lhs, const Point& rhs) {
+  return equals(lhs.x, rhs.x) && equals(lhs.y, rhs.y);
+}
+
+inline bool operator!=(const Point& lhs, const Point& rhs) {
+  return !(lhs == rhs);
+}
+
+namespace std {
+inline bool operator<(const Point& lhs, const Point& rhs) {
+  return ::less(lhs.x, rhs.x) || equals(lhs.x, rhs.x) && ::less(lhs.y, rhs.y);
+}
+}  // namespace std
 
 struct Line {
   Line(const Point& start, const Point& end)
@@ -76,7 +79,6 @@ struct Line {
           bigger(y, std::max(rhs.start.y, rhs.end.y)))
         return {};
 
-      // BUG
       auto dir = less(determinant, 0) ? IntersectType::In : IntersectType::Out;
       auto point = Vector2d{x, y};
       if (rhs.end == point || rhs.start == point) {
