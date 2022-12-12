@@ -63,20 +63,23 @@ std::list<Shape> get_masked_shapes(std::list<Point> clipped,
         if (total == clipped.end()) {
           total = clipped.begin();
         }
-      } while (out_points.count(*total) == 0);
+      } while (in_points.count(*total) == 0 && out_points.count(*total) == 0);
 
+      used.insert(*total);
       if (*total == start_point) break;
 
+      used.insert(*total);
       total = std::find(clipping.begin(), clipping.end(), *total);
 
       do {
+        used.insert(*total);
         masked.push_back(*total);
 
         total++;
         if (total == clipping.end()) {
           total = clipping.begin();
         }
-      } while (in_points.count(*total) == 0);
+      } while (in_points.count(*total) == 0 && out_points.count(*total) == 0);
 
       total = std::find(clipped.begin(), clipped.end(), *total);
 
@@ -117,12 +120,14 @@ std::list<Shape> get_merged_shapes(std::list<Point> clipped,
         }
       } while (in_points.count(*total) == 0 && out_points.count(*total) == 0);
 
+      used.insert(*total);
       if (*total == start_point) break;
 
       auto reversed_total =
           std::find(clipping.rbegin(), clipping.rend(), *total);
 
       do {
+        used.insert(*reversed_total);
         merged.push_back(*reversed_total);
 
         reversed_total++;

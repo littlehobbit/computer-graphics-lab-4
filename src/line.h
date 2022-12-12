@@ -81,7 +81,7 @@ struct Line {
 
       auto dir = less(determinant, 0) ? IntersectType::In : IntersectType::Out;
       auto point = Vector2d{x, y};
-      if (rhs.end == point || rhs.start == point) {
+      if (rhs.end == point || rhs.start == point || start == point || end == point) {
         return {};
       }
 
