@@ -1,8 +1,10 @@
 #ifndef SHAPE_H
 #define SHAPE_H
 
+#include <SFML/Graphics/Color.hpp>
 #include <list>
 
+#include "SFML/Graphics/RenderTarget.hpp"
 #include "line.h"
 
 class Shape {
@@ -56,8 +58,15 @@ class Shape {
     return true;
   }
 
+  void draw(sf::RenderTarget& render, sf::Color line_color,
+            LineStyle line_style = LineStyle::Line) const {
+    for (const auto& edge : _edges) {
+      edge.draw(render, line_color, line_style);
+    }
+  }
+
  private:
-  std::vector<Point> _points;
+  std::list<Point> _points;
   std::list<Line> _edges;
 };
 

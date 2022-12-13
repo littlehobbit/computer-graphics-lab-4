@@ -1,5 +1,5 @@
-#ifndef CONTAINER_H
-#define CONTAINER_H
+#ifndef CONTAINER
+#define CONTAINER
 
 #include <SFML/Graphics/PrimitiveType.hpp>
 #include <SFML/Graphics/RectangleShape.hpp>
@@ -57,7 +57,8 @@ class ShapesLayer : public Layer {
 
     for (const auto& upper_shape : _shapes) {
       for (const auto& prev_shape : prev.shapes) {
-        auto [out, inner] = clipping(prev_shape, upper_shape, show_masked);
+        WeilerAthertonAlgorithm algo(prev_shape, upper_shape);
+        auto [out, inner] = algo.clipping(show_masked);
 
         std::move(out.begin(), out.end(), std::back_inserter(new_out_shapes));
         std::move(inner.begin(), inner.end(), std::back_inserter(masked));
@@ -97,7 +98,8 @@ class WindowMaskLayer : public Layer {
                   {_pos.x - _width / 2.0, _pos.y + _height / 2.0}};
 
     for (const auto& prev_shape : prev.shapes) {
-      auto [out, in] = clipping(prev_shape, mask, true);
+      WeilerAthertonAlgorithm algo(prev_shape, mask);
+      auto [out, in] = algo.clipping(true);
 
       std::move(out.begin(), out.end(), std::back_inserter(masked_out));
       std::move(in.begin(), in.end(), std::back_inserter(inner));
@@ -143,16 +145,12 @@ class Container {
 
     if (show_masked) {
       for (const auto& shape : res.masked_shapes) {
-        for (const auto& edge : shape.get_edges()) {
-          edge.draw(render, {0x20, 0x20, 0x20}, LineStyle::Dashed);
-        }
+        shape.draw(render, {0x20, 0x20, 0x20}, LineStyle::Dashed);
       }
     }
 
     for (const auto& shape : res.shapes) {
-      for (const auto& edge : shape.get_edges()) {
-        edge.draw(render, sf::Color::White, LineStyle::Line);
-      }
+      shape.draw(render, sf::Color::White);
     }
   }
 
